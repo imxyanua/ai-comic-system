@@ -1,5 +1,6 @@
-# Worker SDXL thật trên GPU NVIDIA. Cần NVIDIA Container Toolkit.
-#   docker compose -f infra/docker/docker-compose.yml -f infra/docker/docker-compose.gpu.yml --profile gpu up --build
+# Worker SDXL thật trên GPU NVIDIA. Cần NVIDIA Container Toolkit. Chạy từ thư mục gốc:
+#   docker compose -f docker-compose.yml -f infra/docker/docker-compose.gpu.yml --profile gpu up --build
+# Đường dẫn trong file này tính từ thư mục gốc, vì docker-compose.yml là file -f đầu tiên.
 # Lần đầu tải model SDXL (vài GB) vào volume model-cache.
 services:
   image-worker-mock:
@@ -8,17 +9,17 @@ services:
   image-worker:
     profiles: ["gpu"]
     build:
-      context: ../../apps/image-worker
+      context: apps/image-worker
       dockerfile: Dockerfile.gpu
     environment:
       CELERY_BROKER_URL: redis://redis:6379/0
       MINIO_ENDPOINT: minio:9000
-      MINIO_ACCESS_KEY: minioadmin
-      MINIO_SECRET_KEY: minioadmin
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
       MINIO_BUCKET: comic-assets
       MINIO_USE_SSL: "false"
-      API_INTERNAL_URL: http://api:3000
-      INTERNAL_SERVICE_TOKEN: dev-only
+      API_INTERNAL_URL: http://api:3001
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN}
       MOCK_INFERENCE: "0"
       INFERENCE_DEVICE: cuda
       SDXL_MODEL_ID: stabilityai/stable-diffusion-xl-base-1.0

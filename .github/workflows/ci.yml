@@ -61,6 +61,8 @@ jobs:
         with:
           node-version: 20
           cache: pnpm
+      - name: Create .env with random secrets
+        run: node scripts/init-env.mjs
       - name: Start stack with mock worker
         run: docker compose up --build -d
       - run: pnpm install --frozen-lockfile

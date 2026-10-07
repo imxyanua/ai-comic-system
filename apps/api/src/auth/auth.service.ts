@@ -7,7 +7,7 @@ import { apiError } from "../http";
 import { PrismaService } from "../prisma.service";
 import { APP_ENV } from "../tokens";
 
-const TOKEN_TTL_SECONDS = 60 * 60 * 24 * 7;
+const JWT_ALGORITHM = "HS256";
 
 @Injectable()
 export class AuthService {
@@ -36,7 +36,10 @@ export class AuthService {
     if (!user || !(await bcrypt.compare(password, user.passwordHash))) {
       throw apiError(401, "UNAUTHORIZED", "Email hoặc mật khẩu không đúng");
     }
-    const access_token = jwt.sign({ sub: user.id }, this.env.jwtSecret, { expiresIn: TOKEN_TTL_SECONDS });
+    const access_token = jwt.sign({ sub: user.id }, this.env.jwtSecret, {
+      algorithm: JWT_ALGORITHM,
+      expiresIn: this.env.jwtTtlSeconds,
+    });
     return { access_token };
   }
 
@@ -53,7 +56,7 @@ export class AuthService {
       throw apiError(401, "UNAUTHORIZED", "Thiếu token");
     }
     try {
-      const payload = jwt.verify(header.slice("Bearer ".length), this.env.jwtSecret);
+      const payload = jwt.verify(header.slice("Bearer ".length), this.env.jwtSecret, { algorithms: [JWT_ALGORITHM] });
       if (typeof payload === "string" || typeof payload.sub !== "string") {
         throw apiError(401, "UNAUTHORIZED", "Token không hợp lệ");
       }

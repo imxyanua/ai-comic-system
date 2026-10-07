@@ -1,4 +1,5 @@
 import { Body, Controller, Get, Post, UseGuards } from "@nestjs/common";
+import { AuthRateLimitGuard } from "./auth-rate-limit.guard";
 import { AuthGuard } from "./auth.guard";
 import { AuthService } from "./auth.service";
 import { CurrentUserId } from "./current-user.decorator";
@@ -9,11 +10,13 @@ export class AuthController {
   constructor(private readonly auth: AuthService) {}
 
   @Post("register")
+  @UseGuards(AuthRateLimitGuard)
   register(@Body() body: RegisterDto): Promise<{ id: string; email: string }> {
     return this.auth.register(body.email, body.password);
   }
 
   @Post("login")
+  @UseGuards(AuthRateLimitGuard)
   login(@Body() body: LoginDto): Promise<{ access_token: string }> {
     return this.auth.login(body.email, body.password);
   }

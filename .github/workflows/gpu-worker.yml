@@ -4,12 +4,14 @@ on:
   pull_request:
     paths:
       - apps/image-worker/**
+      - docker-compose.yml
       - infra/docker/docker-compose.gpu.yml
       - .github/workflows/gpu-worker.yml
   push:
     branches: [main]
     paths:
       - apps/image-worker/**
+      - docker-compose.yml
       - infra/docker/docker-compose.gpu.yml
       - .github/workflows/gpu-worker.yml
 
@@ -23,7 +25,9 @@ jobs:
       - name: Build GPU worker image
         run: docker build -f apps/image-worker/Dockerfile.gpu -t comic-image-worker-gpu apps/image-worker
       - name: Validate GPU compose override
-        run: docker compose -f infra/docker/docker-compose.yml -f infra/docker/docker-compose.gpu.yml --profile gpu config --quiet
+        run: |
+          node scripts/init-env.mjs
+          docker compose -f docker-compose.yml -f infra/docker/docker-compose.gpu.yml --profile gpu config --quiet
       - name: Real Diffusers SDXL inference on CPU with a tiny model
         run: >
           docker run --rm
