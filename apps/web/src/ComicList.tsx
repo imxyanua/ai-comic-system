@@ -50,14 +50,15 @@ export function ComicList({ http }: { http: Client }) {
   return (
     <div className="split">
       <section className="panel stack">
+        <p className="kicker">Danh sách</p>
         <h2>Comic của bạn</h2>
         {comics === null ? <p className="muted">Đang tải…</p> : null}
-        {comics?.length === 0 ? <p className="muted">Chưa có comic nào.</p> : null}
+        {comics?.length === 0 ? <p className="empty">Chưa có comic nào.</p> : null}
         <ul className="list">
           {comics?.map((comic) => (
             <li key={comic.id}>
               <a href={`#/comics/${comic.id}`}>{comic.title}</a>
-              <span className="muted"> · {comic.status}</span>
+              <span className="chip">{comic.status}</span>
               <button type="button" className="ghost small" onClick={() => archive(comic)}>
                 Archive
               </button>
@@ -67,6 +68,7 @@ export function ComicList({ http }: { http: Client }) {
         {error ? <p className="error">{error}</p> : null}
       </section>
       <form className="panel stack" onSubmit={create}>
+        <p className="kicker">Tạo mới</p>
         <h2>Comic mới</h2>
         <label>
           Tên comic
@@ -81,7 +83,7 @@ export function ComicList({ http }: { http: Client }) {
             onChange={(event) => setStyleGuide(event.target.value)}
           />
         </label>
-        <button type="submit" disabled={busy}>
+        <button type="submit" className="accent" disabled={busy}>
           Tạo comic
         </button>
       </form>
