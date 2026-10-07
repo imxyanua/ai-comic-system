@@ -29,6 +29,23 @@ export class GenerationController {
     return this.generation.getJob(userId, jobId);
   }
 
+  @Post("jobs/:jobId/retry")
+  async retry(
+    @CurrentUserId() userId: string,
+    @Param("jobId", ParseUUIDPipe) jobId: string,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const result = await this.generation.retry(userId, jobId);
+    response.status(result.httpStatus);
+    return result.body;
+  }
+
+  @Post("jobs/:jobId/cancel")
+  @HttpCode(200)
+  cancel(@CurrentUserId() userId: string, @Param("jobId", ParseUUIDPipe) jobId: string) {
+    return this.generation.cancel(userId, jobId);
+  }
+
   @Get("panels/:panelId/jobs")
   listPanelJobs(@CurrentUserId() userId: string, @Param("panelId", ParseUUIDPipe) panelId: string) {
     return this.generation.listPanelJobs(userId, panelId);

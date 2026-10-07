@@ -1,3 +1,4 @@
+import io
 import logging
 import os
 import time
@@ -12,54 +13,71 @@ log = logging.getLogger(__name__)
 
 PUT_ATTEMPTS = 2
 CALLBACK_ATTEMPTS = 3
+MOCK_FAIL_MARKER = "[mock:fail]"
+MOCK_SLOW_MARKER = "[mock:slow]"
+MOCK_SLOW_SECONDS = 6
+
+
+class JobCancelled(Exception):
+    pass
 
 
 @celery_app.task(name="panel.generate_image")
 def generate_image(**kwargs: object) -> None:
     job_id = str(kwargs.get("job_id") or "")
     storage_key = str(kwargs.get("storage_key") or "")
-    schema_version = kwargs.get("task_schema_version")
     if not job_id or not storage_key:
         log.error("task missing job_id or storage_key")
         return
+    try:
+        run_job(job_id, storage_key, kwargs)
+    except JobCancelled:
+        log.info("job_id=%s cancelled, stopping", job_id)
+
+
+def run_job(job_id: str, storage_key: str, payload: dict[str, object]) -> None:
     log.info("job_id=%s start", job_id)
     report(job_id, {"status": "running"})
+    if payload.get("task_schema_version") != 1:
+        fail(job_id, "UNSUPPORTED_TASK_SCHEMA", "task_schema_version không được hỗ trợ")
+        return
     if os.environ.get("MOCK_INFERENCE", "1") != "1":
-        report(
-            job_id,
-            {
-                "status": "failed",
-                "error_code": "SDXL_NOT_READY",
-                "error_message": "SDXL thuộc milestone sau. Dùng mock worker.",
-            },
-        )
+        fail(job_id, "SDXL_NOT_READY", "SDXL thuộc milestone sau. Dùng mock worker.")
         return
-    if schema_version != 1:
-        report(
-            job_id,
-            {
-                "status": "failed",
-                "error_code": "UNSUPPORTED_TASK_SCHEMA",
-                "error_message": "task_schema_version không được hỗ trợ",
-            },
-        )
+
+    outcome = mock_outcome(str(payload.get("prompt") or ""))
+    if outcome.delay_seconds:
+        time.sleep(outcome.delay_seconds)
+    if outcome.fail:
+        fail(job_id, "MOCK_FAILURE", "Prompt có [mock:fail]")
         return
+
     image = solid_png(64, 64)
     try:
         put_object(storage_key, image)
     except Exception as error:
         log.exception("job_id=%s upload failed", job_id)
-        report(
-            job_id,
-            {
-                "status": "failed",
-                "error_code": "UPLOAD_FAILED",
-                "error_message": str(error),
-            },
-        )
+        fail(job_id, "UPLOAD_FAILED", str(error))
         return
     report(job_id, {"status": "succeeded", "size_bytes": len(image)})
     log.info("job_id=%s succeeded", job_id)
+
+
+class MockOutcome:
+    def __init__(self, fail: bool, delay_seconds: int) -> None:
+        self.fail = fail
+        self.delay_seconds = delay_seconds
+
+
+def mock_outcome(prompt: str) -> MockOutcome:
+    return MockOutcome(
+        fail=MOCK_FAIL_MARKER in prompt,
+        delay_seconds=MOCK_SLOW_SECONDS if MOCK_SLOW_MARKER in prompt else 0,
+    )
+
+
+def fail(job_id: str, code: str, message: str) -> None:
+    report(job_id, {"status": "failed", "error_code": code, "error_message": message})
 
 
 def put_object(storage_key: str, image: bytes) -> None:
@@ -76,7 +94,7 @@ def put_object(storage_key: str, image: bytes) -> None:
             client.put_object(
                 bucket,
                 storage_key,
-                data=_bytes_stream(image),
+                data=io.BytesIO(image),
                 length=len(image),
                 content_type="image/png",
             )
@@ -89,28 +107,22 @@ def put_object(storage_key: str, image: bytes) -> None:
 
 
 def report(job_id: str, body: dict[str, object]) -> None:
+    """PATCH the job on the API. Raises JobCancelled when the API rejects the update with 409."""
     url = f"{os.environ['API_INTERNAL_URL'].rstrip('/')}/internal/v1/jobs/{job_id}"
     token = os.environ["INTERNAL_SERVICE_TOKEN"]
     last_error: Exception | None = None
     for attempt in range(CALLBACK_ATTEMPTS):
         try:
-            response = httpx.patch(
-                url,
-                json=body,
-                headers={"X-Service-Token": token},
-                timeout=10,
-            )
-            response.raise_for_status()
-            return
-        except Exception as error:
+            response = httpx.patch(url, json=body, headers={"X-Service-Token": token}, timeout=10)
+        except httpx.HTTPError as error:
             last_error = error
-            log.warning("job_id=%s callback attempt %s failed", job_id, attempt + 1)
-            if attempt + 1 < CALLBACK_ATTEMPTS:
-                time.sleep(2)
+        else:
+            if response.status_code == 409:
+                raise JobCancelled()
+            if response.is_success:
+                return
+            last_error = RuntimeError(f"HTTP {response.status_code}: {response.text}")
+        log.warning("job_id=%s callback attempt %s failed: %s", job_id, attempt + 1, last_error)
+        if attempt + 1 < CALLBACK_ATTEMPTS:
+            time.sleep(2)
     log.error("job_id=%s callback gave up: %s", job_id, last_error)
-
-
-def _bytes_stream(image: bytes):
-    import io
-
-    return io.BytesIO(image)

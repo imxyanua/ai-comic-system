@@ -65,7 +65,7 @@ async function registerUser(label) {
 }
 
 async function waitForJob(token, jobId) {
-  for (let attempt = 0; attempt < 30; attempt += 1) {
+  for (let attempt = 0; attempt < 45; attempt += 1) {
     const { json } = await call("GET", `/jobs/${jobId}`, { token });
     if (["succeeded", "failed", "cancelled"].includes(json.status)) {
       return json;
@@ -240,13 +240,73 @@ async function main() {
     assert(history.length === 1 && history[0].attempt === 1, "job history is wrong");
   });
 
+  const createPanel = async (prompt) =>
+    (await call("POST", `/scenes/${sceneA.id}/panels`, { token: owner, body: { image_prompt: prompt } })).json;
+  const getPanel = async (panelId) =>
+    (await call("GET", `/scenes/${sceneA.id}/panels`, { token: owner })).json.find((panel) => panel.id === panelId);
+
+  await step("regenerate keeps the old image until the new job succeeds", async () => {
+    const before = await getPanel(panels[0].id);
+    await call("PATCH", `/panels/${panels[0].id}`, { token: owner, body: { image_prompt: "[mock:slow] mưa to hơn" } });
+    const regenerated = await call("POST", `/panels/${panels[0].id}/generate`, { token: owner, body: {}, expect: [202] });
+    const during = await getPanel(panels[0].id);
+    assert(["queued", "running"].includes(during.generation_status), `panel status is ${during.generation_status}`);
+    assert(during.image_asset_id === before.image_asset_id, "old image was replaced before the new job finished");
+    const repeat = await call("POST", `/panels/${panels[0].id}/generate`, {
+      token: owner,
+      body: { seed: 1 },
+      expect: [409],
+    });
+    assert(repeat.json.error.code === "CONFLICT", "second job with other params was not rejected");
+    const job = await waitForJob(owner, regenerated.json.job_id);
+    assert(job.status === "succeeded", `regenerate ended as ${job.status}`);
+    const after = await getPanel(panels[0].id);
+    assert(after.image_asset_id === job.result_asset_id && after.image_asset_id !== before.image_asset_id, "new image not attached");
+    const history = (await call("GET", `/panels/${panels[0].id}/jobs`, { token: owner })).json;
+    assert(history.length === 2, `expected 2 jobs, got ${history.length}`);
+  });
+
+  await step("cancel a queued job", async () => {
+    const busy = await createPanel("[mock:slow] worker bận");
+    const waiting = await createPanel("chờ tới lượt");
+    const busyJob = (await call("POST", `/panels/${busy.id}/generate`, { token: owner, body: {}, expect: [202] })).json;
+    const waitingJob = (await call("POST", `/panels/${waiting.id}/generate`, { token: owner, body: {}, expect: [202] })).json;
+    const cancelled = (await call("POST", `/jobs/${waitingJob.job_id}/cancel`, { token: owner })).json;
+    assert(cancelled.status === "cancelled", `cancel returned ${cancelled.status}`);
+    assert((await getPanel(waiting.id)).generation_status === "cancelled", "panel not cancelled");
+    await call("POST", `/jobs/${waitingJob.job_id}/cancel`, { token: owner, expect: [409] });
+    assert((await waitForJob(owner, busyJob.job_id)).status === "succeeded", "busy job did not succeed");
+    await sleep(4000);
+    const after = (await call("GET", `/jobs/${waitingJob.job_id}`, { token: owner })).json;
+    assert(after.status === "cancelled", `cancelled job became ${after.status}`);
+    const panel = await getPanel(waiting.id);
+    assert(panel.generation_status === "cancelled" && panel.image_asset_id === null, "cancelled job still attached an image");
+  });
+
+  await step("retry a failed job creates a new attempt", async () => {
+    const panel = await createPanel("[mock:fail] bão");
+    const first = (await call("POST", `/panels/${panel.id}/generate`, { token: owner, body: {}, expect: [202] })).json;
+    const failed = await waitForJob(owner, first.job_id);
+    assert(failed.status === "failed" && failed.error_code === "MOCK_FAILURE", `first job ended as ${failed.status}`);
+    assert((await getPanel(panel.id)).generation_status === "failed", "panel not failed");
+    const retried = (await call("POST", `/jobs/${first.job_id}/retry`, { token: owner, expect: [202] })).json;
+    assert(retried.job_id !== first.job_id, "retry reused the old job");
+    const second = await waitForJob(owner, retried.job_id);
+    assert(second.attempt === 2, `retry attempt is ${second.attempt}`);
+    const original = (await call("GET", `/jobs/${first.job_id}`, { token: owner })).json;
+    assert(original.status === "failed", "old job changed after retry");
+    const succeededJob = (await call("GET", `/panels/${panels[0].id}/jobs`, { token: owner })).json[0];
+    await call("POST", `/jobs/${succeededJob.job_id}/retry`, { token: owner, expect: [409] });
+  });
+
   await step("delete panel and scene", async () => {
+    const before = (await call("GET", `/scenes/${sceneA.id}/panels`, { token: owner })).json.length;
     await call("DELETE", `/panels/${panels[2].id}`, { token: owner, expect: [204] });
     await call("DELETE", `/scenes/${sceneB.id}`, { token: owner, expect: [204] });
     const scenes = (await call("GET", `/comics/${comic.id}/scenes`, { token: owner })).json;
     assert(scenes.length === 1, "scene was not deleted");
     const remaining = (await call("GET", `/scenes/${sceneA.id}/panels`, { token: owner })).json;
-    assert(remaining.length === 2, "panel was not deleted");
+    assert(remaining.length === before - 1, "panel was not deleted");
   });
 
   await step("archive hides the comic from the list", async () => {
