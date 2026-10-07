@@ -7,6 +7,7 @@ import time
 import httpx
 from minio import Minio
 
+from worker import inference
 from worker.celery_app import celery_app
 from worker.png import solid_png
 
@@ -42,18 +43,12 @@ def run_job(job_id: str, storage_key: str, payload: dict[str, object]) -> None:
     if payload.get("task_schema_version") != 1:
         fail(job_id, "UNSUPPORTED_TASK_SCHEMA", "task_schema_version không được hỗ trợ")
         return
-    if os.environ.get("MOCK_INFERENCE", "1") != "1":
-        fail(job_id, "SDXL_NOT_READY", "SDXL thuộc milestone sau. Dùng mock worker.")
+    if os.environ.get("MOCK_INFERENCE", "1") == "1":
+        image = mock_image(job_id, payload)
+    else:
+        image = sdxl_image(job_id, payload)
+    if image is None:
         return
-
-    outcome = mock_outcome(str(payload.get("prompt") or ""))
-    if outcome.delay_seconds:
-        time.sleep(outcome.delay_seconds)
-    if outcome.fail:
-        fail(job_id, "MOCK_FAILURE", "Prompt có [mock:fail]")
-        return
-
-    image = solid_png(64, 64, mock_color(str(payload.get("prompt") or "")))
     try:
         put_object(storage_key, image)
     except Exception as error:
@@ -62,6 +57,36 @@ def run_job(job_id: str, storage_key: str, payload: dict[str, object]) -> None:
         return
     report(job_id, {"status": "succeeded", "size_bytes": len(image)})
     log.info("job_id=%s succeeded", job_id)
+
+
+def mock_image(job_id: str, payload: dict[str, object]) -> bytes | None:
+    prompt = str(payload.get("prompt") or "")
+    outcome = mock_outcome(prompt)
+    if outcome.delay_seconds:
+        time.sleep(outcome.delay_seconds)
+    if outcome.fail:
+        fail(job_id, "MOCK_FAILURE", "Prompt có [mock:fail]")
+        return None
+    return solid_png(64, 64, mock_color(prompt))
+
+
+def sdxl_image(job_id: str, payload: dict[str, object]) -> bytes | None:
+    try:
+        return inference.generate_png(
+            prompt=str(payload.get("prompt") or ""),
+            negative_prompt=str(payload.get("negative_prompt") or ""),
+            seed=int(payload.get("seed") or 0),
+            width=int(payload.get("width") or 1024),
+            height=int(payload.get("height") or 1024),
+            steps=int(payload.get("steps") or 20),
+        )
+    except inference.InferenceOutOfMemory as error:
+        log.error("job_id=%s out of GPU memory", job_id)
+        fail(job_id, "INFERENCE_OOM", f"Hết bộ nhớ GPU, thử giảm kích thước hoặc số bước. {error}")
+    except Exception as error:
+        log.exception("job_id=%s inference failed", job_id)
+        fail(job_id, "INFERENCE_FAILED", str(error))
+    return None
 
 
 class MockOutcome:

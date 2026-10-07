@@ -41,6 +41,62 @@ def test_mock_fail_marker_reports_failure_without_upload(calls):
     }
 
 
+def test_sdxl_path_uploads_generated_png(calls, monkeypatch):
+    received = {}
+
+    def fake_generate(**kwargs):
+        received.update(kwargs)
+        return b"\x89PNG fake"
+
+    monkeypatch.setenv("MOCK_INFERENCE", "0")
+    monkeypatch.setattr(tasks.inference, "generate_png", fake_generate)
+    tasks.run_job(
+        "job-1",
+        "panels/c/job-1.png",
+        {
+            "task_schema_version": 1,
+            "prompt": "a street",
+            "negative_prompt": "blurry",
+            "seed": 7,
+            "width": 768,
+            "height": 512,
+            "steps": 12,
+        },
+    )
+    assert received == {
+        "prompt": "a street",
+        "negative_prompt": "blurry",
+        "seed": 7,
+        "width": 768,
+        "height": 512,
+        "steps": 12,
+    }
+    assert calls["puts"] == ["panels/c/job-1.png"]
+    assert calls["reports"][-1] == {"status": "succeeded", "size_bytes": len(b"\x89PNG fake")}
+
+
+def test_sdxl_out_of_memory_reports_oom(calls, monkeypatch):
+    def out_of_memory(**kwargs):
+        raise tasks.inference.InferenceOutOfMemory("CUDA out of memory")
+
+    monkeypatch.setenv("MOCK_INFERENCE", "0")
+    monkeypatch.setattr(tasks.inference, "generate_png", out_of_memory)
+    tasks.run_job("job-1", "k", payload())
+    assert calls["puts"] == []
+    assert calls["reports"][-1]["status"] == "failed"
+    assert calls["reports"][-1]["error_code"] == "INFERENCE_OOM"
+
+
+def test_sdxl_error_reports_inference_failed(calls, monkeypatch):
+    def broken(**kwargs):
+        raise RuntimeError("model missing")
+
+    monkeypatch.setenv("MOCK_INFERENCE", "0")
+    monkeypatch.setattr(tasks.inference, "generate_png", broken)
+    tasks.run_job("job-1", "k", payload())
+    assert calls["reports"][-1] == {"status": "failed", "error_code": "INFERENCE_FAILED", "error_message": "model missing"}
+
+
 def test_unknown_schema_version_fails(calls):
     tasks.run_job("job-1", "k", {"task_schema_version": 2, "prompt": "x"})
     assert calls["reports"][-1]["error_code"] == "UNSUPPORTED_TASK_SCHEMA"
