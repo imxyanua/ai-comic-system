@@ -1,0 +1,209 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(uuid()) @db.Uuid
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  comics       Comic[]
+
+  @@map("users")
+}
+
+model Comic {
+  id          String         @id @default(uuid()) @db.Uuid
+  ownerId     String         @map("owner_id") @db.Uuid
+  title       String
+  description String?
+  styleGuide  String?        @map("style_guide")
+  status      ComicStatus    @default(draft)
+  createdAt   DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
+  owner       User           @relation(fields: [ownerId], references: [id])
+  story       Story?
+  characters  Character[]
+  assets      Asset[]
+  workflows   WorkflowRun[]
+
+  @@index([ownerId])
+  @@map("comics")
+}
+
+model Story {
+  id        String  @id @default(uuid()) @db.Uuid
+  comicId   String  @unique @map("comic_id") @db.Uuid
+  title     String
+  synopsis  String?
+  content   String?
+  comic     Comic   @relation(fields: [comicId], references: [id], onDelete: Cascade)
+  scenes    Scene[]
+
+  @@map("stories")
+}
+
+model Scene {
+  id        String  @id @default(uuid()) @db.Uuid
+  storyId   String  @map("story_id") @db.Uuid
+  sortOrder Int     @map("sort_order")
+  title     String?
+  summary   String?
+  story     Story   @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  panels    Panel[]
+
+  @@unique([storyId, sortOrder])
+  @@map("scenes")
+}
+
+model Panel {
+  id                String           @id @default(uuid()) @db.Uuid
+  sceneId           String           @map("scene_id") @db.Uuid
+  sortOrder         Int              @map("sort_order")
+  imagePrompt       String?          @map("image_prompt")
+  negativePrompt    String?          @map("negative_prompt")
+  imageAssetId      String?          @map("image_asset_id") @db.Uuid
+  generationStatus  GenerationStatus @default(idle) @map("generation_status")
+  updatedAt         DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
+  scene             Scene            @relation(fields: [sceneId], references: [id], onDelete: Cascade)
+  imageAsset        Asset?           @relation("PanelImage", fields: [imageAssetId], references: [id])
+  dialogLines       DialogLine[]
+  jobs              GenerationJob[]
+
+  @@unique([sceneId, sortOrder])
+  @@map("panels")
+}
+
+model DialogLine {
+  id        String @id @default(uuid()) @db.Uuid
+  panelId   String @map("panel_id") @db.Uuid
+  sortOrder Int    @map("sort_order")
+  speaker   String
+  text      String
+  panel     Panel  @relation(fields: [panelId], references: [id], onDelete: Cascade)
+
+  @@map("dialog_lines")
+}
+
+model Character {
+  id               String  @id @default(uuid()) @db.Uuid
+  comicId          String  @map("comic_id") @db.Uuid
+  name             String
+  description      String
+  referenceAssetId String? @map("reference_asset_id") @db.Uuid
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  comic            Comic   @relation(fields: [comicId], references: [id], onDelete: Cascade)
+  referenceAsset   Asset?  @relation("CharacterRef", fields: [referenceAssetId], references: [id])
+
+  @@map("characters")
+}
+
+model Asset {
+  id           String      @id @default(uuid()) @db.Uuid
+  comicId      String      @map("comic_id") @db.Uuid
+  kind         AssetKind
+  status       AssetStatus @default(pending)
+  storageKey   String      @unique @map("storage_key")
+  mimeType     String      @map("mime_type")
+  sizeBytes    BigInt?     @map("size_bytes")
+  createdAt    DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  comic        Comic       @relation(fields: [comicId], references: [id], onDelete: Cascade)
+  panelImages  Panel[]     @relation("PanelImage")
+  characters   Character[] @relation("CharacterRef")
+  jobs         GenerationJob[]
+
+  @@map("assets")
+}
+
+model GenerationJob {
+  id              String    @id @default(uuid()) @db.Uuid
+  panelId         String    @map("panel_id") @db.Uuid
+  workflowRunId   String?   @map("workflow_run_id") @db.Uuid
+  celeryTaskId    String?   @map("celery_task_id")
+  status          JobStatus
+  promptSnapshot  Json      @map("prompt_snapshot")
+  resultAssetId   String    @map("result_asset_id") @db.Uuid
+  errorCode       String?   @map("error_code")
+  errorMessage    String?   @map("error_message")
+  attempt         Int       @default(1)
+  idempotencyKey  String?   @map("idempotency_key")
+  queuedAt        DateTime? @map("queued_at") @db.Timestamptz(6)
+  startedAt       DateTime? @map("started_at") @db.Timestamptz(6)
+  finishedAt      DateTime? @map("finished_at") @db.Timestamptz(6)
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  panel           Panel     @relation(fields: [panelId], references: [id], onDelete: Cascade)
+  workflowRun     WorkflowRun? @relation(fields: [workflowRunId], references: [id])
+  resultAsset     Asset     @relation(fields: [resultAssetId], references: [id])
+
+  @@index([panelId, status])
+  @@map("generation_jobs")
+}
+
+model WorkflowRun {
+  id           String         @id @default(uuid()) @db.Uuid
+  comicId      String         @map("comic_id") @db.Uuid
+  type         WorkflowType   @map("type")
+  status       WorkflowStatus
+  currentStep  String         @map("current_step")
+  context      Json
+  errorSummary String?        @map("error_summary")
+  createdAt    DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
+  comic        Comic          @relation(fields: [comicId], references: [id], onDelete: Cascade)
+  jobs         GenerationJob[]
+
+  @@index([comicId, status])
+  @@map("workflow_runs")
+}
+
+enum ComicStatus {
+  draft
+  active
+  archived
+}
+
+enum GenerationStatus {
+  idle
+  queued
+  running
+  succeeded
+  failed
+  cancelled
+}
+
+enum AssetKind {
+  character_ref
+  panel_image
+  export
+}
+
+enum AssetStatus {
+  pending
+  ready
+}
+
+enum JobStatus {
+  pending
+  queued
+  running
+  succeeded
+  failed
+  cancelled
+}
+
+enum WorkflowType {
+  batch_panel_images
+}
+
+enum WorkflowStatus {
+  running
+  completed
+  completed_with_errors
+  failed
+  cancelled
+}
