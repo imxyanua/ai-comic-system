@@ -11,6 +11,8 @@ import { ComicsService } from "./comics/comics.service";
 import { ScenesController } from "./comics/scenes.controller";
 import { ScenesService } from "./comics/scenes.service";
 import { loadEnv } from "./env";
+import { ExportController } from "./export/export.controller";
+import { ExportService } from "./export/export.service";
 import { CeleryPublisher } from "./generation/celery-publisher";
 import { GenerationController } from "./generation/generation.controller";
 import { GenerationService } from "./generation/generation.service";
@@ -34,6 +36,7 @@ import { WorkflowService } from "./workflow/workflow.service";
     InternalJobsController,
     AssetsController,
     WorkflowController,
+    ExportController,
   ],
   providers: [
     { provide: APP_ENV, useFactory: () => loadEnv() },
@@ -49,6 +52,7 @@ import { WorkflowService } from "./workflow/workflow.service";
     GenerationService,
     WorkflowService,
     AssetsService,
+    ExportService,
   ],
 })
 export class AppModule {}

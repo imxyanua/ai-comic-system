@@ -58,6 +58,12 @@ def test_cancelled_job_stops_before_upload(monkeypatch):
     assert puts == []
 
 
+def test_mock_color_depends_on_prompt():
+    assert tasks.mock_color("a") == tasks.mock_color("a")
+    assert tasks.mock_color("a") != tasks.mock_color("b")
+    assert tasks.mock_color("a")[3] == 255
+
+
 def test_slow_marker_delays():
     assert tasks.mock_outcome("x [mock:slow]").delay_seconds == tasks.MOCK_SLOW_SECONDS
     assert tasks.mock_outcome("x").delay_seconds == 0

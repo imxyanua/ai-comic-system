@@ -1,4 +1,9 @@
 // End-to-end checks against the Compose stack with the mock worker.
+import { execFileSync } from "node:child_process";
+import { writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
 const API = process.env.API_BASE_URL ?? "http://localhost:3000";
 const WEB = process.env.WEB_URL ?? "http://localhost:5173";
 const PNG_SIGNATURE = "89504e470d0a1a0a";
@@ -369,6 +374,64 @@ async function main() {
       panelsAfter.every((panel) => panel.generation_status === "cancelled" && panel.image_asset_id === null),
       "a cancelled batch panel received an image",
     );
+  });
+
+  await step("export ZIP follows scene and panel order without dialog", async () => {
+    const book = (await call("POST", "/comics", { token: owner, body: { title: "Export" } })).json;
+    await call("POST", `/comics/${book.id}/export`, { token: owner, body: { format: "zip" }, expect: [400] });
+    const first = (await call("POST", `/comics/${book.id}/scenes`, { token: owner, body: { summary: "một" } })).json;
+    const second = (await call("POST", `/comics/${book.id}/scenes`, { token: owner, body: { summary: "hai" } })).json;
+    const make = async (sceneId, prompt, dialog = []) =>
+      (await call("POST", `/scenes/${sceneId}/panels`, { token: owner, body: { image_prompt: prompt, dialog } })).json;
+    const a = await make(first.id, "export a", [{ speaker: "An", text: "Không được nằm trong zip" }]);
+    const b = await make(first.id, "export b");
+    const c = await make(second.id, "export c");
+    const started = (
+      await call("POST", `/comics/${book.id}/workflows/batch-panel-images`, { token: owner, body: {}, expect: [202] })
+    ).json;
+    for (let attempt = 0; attempt < 45; attempt += 1) {
+      const { json } = await call("GET", `/workflows/${started.workflow_id}`, { token: owner });
+      if (json.status !== "running") {
+        assert(json.status === "completed", `export batch ended as ${json.status}`);
+        break;
+      }
+      await sleep(2000);
+    }
+    await call("PUT", `/scenes/${first.id}/panel-order`, { token: owner, body: { panel_ids: [b.id, a.id] } });
+
+    const exported = (await call("POST", `/comics/${book.id}/export`, { token: owner, body: { format: "zip" } })).json;
+    assert(exported.files.join() === "01-01.png,01-02.png,02-01.png", `export files ${exported.files}`);
+    await call("POST", `/comics/${book.id}/export`, { token: stranger, body: {}, expect: [404] });
+    const response = await fetch(exported.download_url);
+    assert(response.ok, `zip download returned ${response.status}`);
+    const zip = Buffer.from(await response.arrayBuffer());
+    const zipPath = join(tmpdir(), `export-${exported.asset_id}.zip`);
+    writeFileSync(zipPath, zip);
+    const entries = JSON.parse(
+      execFileSync("python3", [
+        "-c",
+        "import base64, json, sys, zipfile\n" +
+          "z = zipfile.ZipFile(sys.argv[1])\n" +
+          "assert z.testzip() is None\n" +
+          "print(json.dumps({n: base64.b64encode(z.read(n)).decode() for n in z.namelist()}))",
+        zipPath,
+      ]).toString(),
+    );
+    assert(Object.keys(entries).join() === exported.files.join(), `zip entries ${Object.keys(entries)}`);
+    const panelImages = async (sceneId) =>
+      Promise.all(
+        (await call("GET", `/scenes/${sceneId}/panels`, { token: owner })).json.map((panel) =>
+          downloadAsset(owner, panel.image_asset_id),
+        ),
+      );
+    const expected = [...(await panelImages(first.id)), ...(await panelImages(second.id))];
+    exported.files.forEach((name, index) => {
+      const data = Buffer.from(entries[name], "base64");
+      assert(data.equals(expected[index]), `${name} does not match the panel in that position`);
+      assert(!data.includes(Buffer.from("Không được nằm trong zip")), `${name} contains dialog text`);
+    });
+    assert(!expected[0].equals(expected[1]), "mock images are identical, order cannot be checked");
+    assert(c.id, "third panel missing");
   });
 
   await step("delete panel and scene", async () => {
