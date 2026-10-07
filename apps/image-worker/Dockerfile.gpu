@@ -1,0 +1,8 @@
+FROM pytorch/pytorch:2.4.1-cuda12.1-cudnn9-runtime
+WORKDIR /app
+ENV PYTHONUNBUFFERED=1 \
+    HF_HOME=/models/huggingface
+COPY requirements.txt requirements-gpu.txt ./
+RUN pip install --no-cache-dir -r requirements-gpu.txt
+COPY worker worker
+CMD ["celery", "-A", "worker.celery_app", "worker", "--loglevel=info", "--concurrency=1"]

@@ -1,0 +1,5 @@
+-r requirements.txt
+diffusers==0.31.0
+transformers==4.46.3
+accelerate==1.1.1
+safetensors==0.4.5
