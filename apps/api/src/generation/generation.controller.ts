@@ -28,4 +28,9 @@ export class GenerationController {
   getJob(@CurrentUserId() userId: string, @Param("jobId", ParseUUIDPipe) jobId: string) {
     return this.generation.getJob(userId, jobId);
   }
+
+  @Get("panels/:panelId/jobs")
+  listPanelJobs(@CurrentUserId() userId: string, @Param("panelId", ParseUUIDPipe) panelId: string) {
+    return this.generation.listPanelJobs(userId, panelId);
+  }
 }
