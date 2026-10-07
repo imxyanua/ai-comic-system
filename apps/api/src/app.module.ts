@@ -19,6 +19,9 @@ import { HealthController } from "./health.controller";
 import { PrismaService } from "./prisma.service";
 import { StorageService } from "./storage.service";
 import { APP_ENV } from "./tokens";
+import { WorkflowProgressService } from "./workflow/workflow-progress.service";
+import { WorkflowController } from "./workflow/workflow.controller";
+import { WorkflowService } from "./workflow/workflow.service";
 
 @Module({
   controllers: [
@@ -30,6 +33,7 @@ import { APP_ENV } from "./tokens";
     GenerationController,
     InternalJobsController,
     AssetsController,
+    WorkflowController,
   ],
   providers: [
     { provide: APP_ENV, useFactory: () => loadEnv() },
@@ -41,7 +45,9 @@ import { APP_ENV } from "./tokens";
     ScenesService,
     CharactersService,
     CeleryPublisher,
+    WorkflowProgressService,
     GenerationService,
+    WorkflowService,
     AssetsService,
   ],
 })

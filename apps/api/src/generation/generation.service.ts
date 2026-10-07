@@ -6,6 +6,7 @@ import { Env } from "../env";
 import { apiError } from "../http";
 import { PrismaService } from "../prisma.service";
 import { APP_ENV } from "../tokens";
+import { WorkflowProgressService } from "../workflow/workflow-progress.service";
 import { CeleryPublisher, TASK_SCHEMA_VERSION } from "./celery-publisher";
 import { computeIdempotencyKey } from "./idempotency";
 import { applyJobCallback, CallbackStatus } from "./job-transition";
@@ -56,6 +57,7 @@ export class GenerationService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly publisher: CeleryPublisher,
+    private readonly progress: WorkflowProgressService,
     @Inject(APP_ENV) private readonly env: Env,
   ) {}
 
@@ -97,17 +99,22 @@ export class GenerationService {
       where: { id: job.panelId },
       select: { scene: { select: { story: { select: { comicId: true } } } } },
     });
+    const workflow = job.workflowRunId
+      ? await this.prisma.workflowRun.findUnique({ where: { id: job.workflowRunId }, select: { status: true } })
+      : null;
+    const workflowRunId = workflow && workflow.status !== "cancelled" ? job.workflowRunId : null;
     const result = await this.enqueue({
       panelId: job.panelId,
       comicId: comic.scene.story.comicId,
       snapshot,
       idempotencyKey: keyFor(job.panelId, snapshot),
       attempt: job.attempt + 1,
-      workflowRunId: job.workflowRunId,
+      workflowRunId,
     });
     if (result.kind === "existing") {
       throw apiError(409, "CONFLICT", "Panel đang có job khác");
     }
+    await this.progress.refresh(workflowRunId);
     return toHttp(result);
   }
 
@@ -117,6 +124,7 @@ export class GenerationService {
     if (!cancelled) {
       throw apiError(409, "CONFLICT", "Job đã kết thúc");
     }
+    await this.progress.refresh(cancelled.workflowRunId);
     return toJobDetail(cancelled);
   }
 
@@ -349,7 +357,10 @@ export class GenerationService {
     if (!updated) {
       throw apiError(409, "CONFLICT", "Job vừa đổi trạng thái");
     }
-    this.logger.log(`job ${effect.jobStatus} job_id=${job.id} panel_id=${job.panelId}`);
+    this.logger.log(
+      `job ${effect.jobStatus} job_id=${job.id} panel_id=${job.panelId} workflow_id=${job.workflowRunId ?? "-"}`,
+    );
+    await this.progress.refresh(updated.workflowRunId);
     return updated;
   }
 
