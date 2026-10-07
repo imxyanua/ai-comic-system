@@ -451,6 +451,39 @@ async function main() {
     assert(!list.some((item) => item.id === comic.id), "archived comic still listed");
   });
 
+  await step("security: internal routes, tokens, headers, login rate limit", async () => {
+    const internal = await fetch(`${API}/internal/v1/jobs/00000000-0000-0000-0000-000000000000`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", "X-Service-Token": "x".repeat(64) },
+      body: JSON.stringify({ status: "running" }),
+    });
+    assert(internal.status === 404, `internal route on public port returned ${internal.status}`);
+
+    const header = Buffer.from(JSON.stringify({ alg: "none", typ: "JWT" })).toString("base64url");
+    const claims = Buffer.from(JSON.stringify({ sub: "00000000-0000-0000-0000-000000000000" })).toString("base64url");
+    await call("GET", "/auth/me", { token: `${header}.${claims}.`, expect: [401] });
+    const [h, p] = owner.split(".");
+    await call("GET", "/auth/me", { token: `${h}.${p}.${"A".repeat(43)}`, expect: [401] });
+
+    const me = await fetch(`${API}/api/v1/auth/me`, { headers: { Authorization: `Bearer ${owner}` } });
+    assert(me.headers.get("x-content-type-options") === "nosniff", "API misses nosniff");
+    assert(me.headers.get("x-powered-by") === null, "API exposes X-Powered-By");
+    const web = await fetch(WEB);
+    assert(web.headers.get("x-frame-options") === "DENY", "web misses X-Frame-Options");
+
+    const email = `brute-${Date.now()}@example.com`;
+    let last;
+    for (let attempt = 0; attempt < 11; attempt += 1) {
+      last = await fetch(`${API}/api/v1/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password: "wrong-password" }),
+      });
+    }
+    assert(last.status === 429, `11th failed login returned ${last.status}`);
+    assert(Number(last.headers.get("retry-after")) > 0, "429 without Retry-After");
+  });
+
   console.log("smoke test passed");
 }
 

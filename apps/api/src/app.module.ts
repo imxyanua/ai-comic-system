@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 import { AssetsController } from "./assets/assets.controller";
 import { AssetsService } from "./assets/assets.service";
+import { AuthRateLimitGuard } from "./auth/auth-rate-limit.guard";
 import { AuthController } from "./auth/auth.controller";
 import { AuthGuard } from "./auth/auth.guard";
 import { AuthService } from "./auth/auth.service";
@@ -44,6 +45,7 @@ import { WorkflowService } from "./workflow/workflow.service";
     StorageService,
     AuthService,
     AuthGuard,
+    AuthRateLimitGuard,
     ComicsService,
     ScenesService,
     CharactersService,
