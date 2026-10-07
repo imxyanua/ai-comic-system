@@ -1,0 +1,11 @@
+{
+  "name": "ai-comic-system",
+  "private": true,
+  "packageManager": "pnpm@9.15.9",
+  "scripts": {
+    "dev:api": "pnpm --filter api dev",
+    "dev:web": "pnpm --filter web dev",
+    "test": "pnpm --filter api test",
+    "build": "pnpm --filter api build && pnpm --filter web build"
+  }
+}
