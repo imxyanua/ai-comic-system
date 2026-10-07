@@ -4,6 +4,7 @@ export type Env = {
   jwtSecret: string;
   internalServiceToken: string;
   minioPublicEndpoint: string;
+  minioInternalEndpoint: string;
   minioAccessKey: string;
   minioSecretKey: string;
   minioBucket: string;
@@ -41,6 +42,7 @@ export function loadEnv(): Env {
     jwtSecret: required("JWT_SECRET"),
     internalServiceToken: required("INTERNAL_SERVICE_TOKEN"),
     minioPublicEndpoint: required("MINIO_PUBLIC_ENDPOINT"),
+    minioInternalEndpoint: process.env.MINIO_INTERNAL_ENDPOINT ?? required("MINIO_PUBLIC_ENDPOINT"),
     minioAccessKey: required("MINIO_ACCESS_KEY"),
     minioSecretKey: required("MINIO_SECRET_KEY"),
     minioBucket: required("MINIO_BUCKET"),

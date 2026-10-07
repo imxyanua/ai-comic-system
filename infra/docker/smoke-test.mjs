@@ -144,6 +144,48 @@ async function main() {
     assert(list.length === 1 && list[0].description === "áo đỏ, tóc ngắn", "character list is wrong");
   });
 
+  await step("character reference upload with presign", async () => {
+    const hero = (await call("GET", `/comics/${comic.id}/characters`, { token: owner })).json[0];
+    const image = Buffer.from(
+      "89504e470d0a1a0a0000000d4948445200000001000000010806000000" +
+        "1f15c4890000000d49444154789c63f8cfc0f01f0005000201a5f4d6e30000000049454e44ae426082",
+      "hex",
+    );
+    await call("POST", `/comics/${comic.id}/assets/upload-url`, {
+      token: owner,
+      body: { filename: "a.txt", mime_type: "text/plain", kind: "character_ref", size_bytes: 10 },
+      expect: [400],
+    });
+    await call("POST", `/comics/${comic.id}/assets/upload-url`, {
+      token: owner,
+      body: { filename: "big.png", mime_type: "image/png", kind: "character_ref", size_bytes: 6 * 1024 * 1024 },
+      expect: [400],
+    });
+    const upload = (
+      await call("POST", `/comics/${comic.id}/assets/upload-url`, {
+        token: owner,
+        body: { filename: "an.png", mime_type: "image/png", kind: "character_ref", size_bytes: image.length },
+      })
+    ).json;
+    await call("POST", `/assets/${upload.asset_id}/complete`, { token: owner, expect: [400] });
+    await call("PATCH", `/characters/${hero.id}`, {
+      token: owner,
+      body: { reference_asset_id: upload.asset_id },
+      expect: [400],
+    });
+    const put = await fetch(upload.upload_url, { method: "PUT", headers: upload.headers, body: image });
+    assert(put.ok, `presigned PUT returned ${put.status}: ${await put.text()}`);
+    const ready = (await call("POST", `/assets/${upload.asset_id}/complete`, { token: owner })).json;
+    assert(ready.status === "ready" && ready.size_bytes === image.length, "asset not ready after upload");
+    const linked = (
+      await call("PATCH", `/characters/${hero.id}`, { token: owner, body: { reference_asset_id: upload.asset_id } })
+    ).json;
+    assert(linked.reference_asset_id === upload.asset_id, "character not linked to the reference");
+    await call("GET", `/assets/${upload.asset_id}`, { token: stranger, expect: [404] });
+    const downloaded = await downloadAsset(owner, upload.asset_id);
+    assert(downloaded.equals(image), "downloaded reference differs from the upload");
+  });
+
   await step("scene CRUD", async () => {
     sceneA = (await call("POST", `/comics/${comic.id}/scenes`, { token: owner, body: { summary: "phố sau mưa" } })).json;
     sceneB = (await call("POST", `/comics/${comic.id}/scenes`, { token: owner, body: { title: "B" } })).json;
