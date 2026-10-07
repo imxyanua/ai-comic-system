@@ -70,7 +70,7 @@ export class ExportService {
     this.logger.log(`export ready comic_id=${comic.id} asset_id=${assetId} files=${files.length}`);
     return {
       asset_id: assetId,
-      download_url: await this.storage.presignGet(storageKey),
+      download_url: await this.storage.presignGet(storageKey, `comic-${comic.id}.zip`),
       files: files.map((file) => file.name),
     };
   }

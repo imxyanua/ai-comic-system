@@ -18,10 +18,16 @@ export class StorageService {
     this.internalClient = s3Client(env, env.minioInternalEndpoint);
   }
 
-  presignGet(key: string): Promise<string> {
-    return getSignedUrl(this.publicClient, new GetObjectCommand({ Bucket: this.bucket, Key: key }), {
-      expiresIn: PRESIGN_SECONDS,
-    });
+  presignGet(key: string, downloadName?: string): Promise<string> {
+    return getSignedUrl(
+      this.publicClient,
+      new GetObjectCommand({
+        Bucket: this.bucket,
+        Key: key,
+        ResponseContentDisposition: downloadName ? `attachment; filename="${downloadName}"` : undefined,
+      }),
+      { expiresIn: PRESIGN_SECONDS },
+    );
   }
 
   presignPut(key: string, contentType: string, contentLength: number): Promise<string> {

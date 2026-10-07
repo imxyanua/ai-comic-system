@@ -29,6 +29,30 @@ export async function api<T>(path: string, options: RequestInit = {}, token?: st
   return data;
 }
 
+export function errorMessage(caught: unknown): string {
+  return caught instanceof RequestError ? caught.message : "Không gọi được API";
+}
+
+export type Client = {
+  get<T>(path: string): Promise<T>;
+  post<T>(path: string, body?: unknown): Promise<T>;
+  patch<T>(path: string, body: unknown): Promise<T>;
+  put<T>(path: string, body: unknown): Promise<T>;
+  del(path: string): Promise<void>;
+};
+
+export function client(token: string): Client {
+  return {
+    get: (path) => api(path, {}, token),
+    post: (path, body = {}) => api(path, { method: "POST", body: JSON.stringify(body) }, token),
+    patch: (path, body) => api(path, { method: "PATCH", body: JSON.stringify(body) }, token),
+    put: (path, body) => api(path, { method: "PUT", body: JSON.stringify(body) }, token),
+    del: async (path) => {
+      await api(path, { method: "DELETE" }, token);
+    },
+  };
+}
+
 function isApiError(value: unknown): value is ApiError {
   return typeof value === "object" && value !== null && "error" in value;
 }
