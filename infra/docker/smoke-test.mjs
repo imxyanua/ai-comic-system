@@ -37,7 +37,7 @@ async function waitFor(url) {
   throw new Error(`timeout waiting for ${url}`);
 }
 
-async function call(method, path, { token, body, expect = [200] } = {}) {
+async function call(method, path, { token, body, expect = method === "POST" ? [200, 201] : [200] } = {}) {
   const headers = {};
   if (body !== undefined) {
     headers["Content-Type"] = "application/json";
