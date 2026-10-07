@@ -45,7 +45,10 @@ export function SceneSection({ http, index, scene, panels, onChanged, onError }:
 
   return (
     <section className="panel stack" data-testid="scene">
-      <div className="row wrap">
+      <div className="scene-head">
+        <span className="scene-index" aria-hidden="true">
+          {index + 1}
+        </span>
         <h2>Cảnh {index + 1}</h2>
         <input placeholder="Tiêu đề cảnh" value={title} onChange={(event) => setTitle(event.target.value)} />
         <button type="button" className="small" onClick={save}>

@@ -161,11 +161,14 @@ export function ComicEditor({ http, comicId }: { http: Client; comicId: string }
   return (
     <div className="stack">
       <p>
-        <a href="#/">← Danh sách comic</a>
+        <a className="crumb" href="#/">
+          ← Danh sách comic
+        </a>
       </p>
 
       <div className="split">
         <form className="panel stack" onSubmit={saveComic}>
+          <p className="kicker">Siêu dữ liệu</p>
           <h2>Comic</h2>
           <label>
             Tên
@@ -191,6 +194,7 @@ export function ComicEditor({ http, comicId }: { http: Client; comicId: string }
         </form>
 
         <form className="panel stack" onSubmit={saveStory}>
+          <p className="kicker">Cốt truyện</p>
           <h2>Story</h2>
           <label>
             Tiêu đề
@@ -219,8 +223,8 @@ export function ComicEditor({ http, comicId }: { http: Client; comicId: string }
       <CharactersSection http={http} comicId={comicId} characters={characters} onChanged={loadCharacters} onError={setError} />
 
       <section className="panel toolbar">
-        <div className="row">
-          <button type="button" onClick={startBatch} disabled={workflow?.status === "running"}>
+        <div className="row wrap">
+          <button type="button" className="accent" onClick={startBatch} disabled={workflow?.status === "running"}>
             Sinh ảnh tất cả panel
           </button>
           {workflow?.status === "running" ? (
@@ -245,7 +249,7 @@ export function ComicEditor({ http, comicId }: { http: Client; comicId: string }
         {error ? <p className="error">{error}</p> : null}
       </section>
 
-      {scenes.length === 0 ? <p className="muted">Chưa có cảnh nào. Bấm “Thêm cảnh” để bắt đầu.</p> : null}
+      {scenes.length === 0 ? <p className="empty">Chưa có cảnh nào. Bấm “Thêm cảnh” để bắt đầu.</p> : null}
       {scenes.map((scene, index) => (
         <SceneSection
           key={scene.id}

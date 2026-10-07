@@ -29,6 +29,7 @@ export function CharactersSection({ http, comicId, characters, onChanged, onErro
 
   return (
     <section className="panel stack">
+      <p className="kicker">Cast</p>
       <h2>Nhân vật</h2>
       <p className="muted">Mô tả nhân vật được ghép vào prompt khi panel chưa có prompt riêng.</p>
       <div className="cards">

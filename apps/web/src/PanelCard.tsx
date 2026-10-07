@@ -148,7 +148,7 @@ export function PanelCard({ http, label, panel, isFirst, isLast, onMove, onChang
         </button>
       </div>
       <div className="row wrap">
-        <button type="button" className="small" onClick={generate} disabled={active}>
+        <button type="button" className="small accent" onClick={generate} disabled={active}>
           {panel.image_asset_id ? "Sinh lại" : "Sinh ảnh"}
         </button>
         {active ? (

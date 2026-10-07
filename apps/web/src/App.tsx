@@ -49,16 +49,22 @@ export function App() {
 
   return (
     <main className="page">
-      <header>
-        <div>
-          <h1>
-            <a href="#/">ComicSystem</a>
-          </h1>
-          <p className="muted">Comic, nhân vật, cảnh, panel. Ảnh sinh bất đồng bộ trên worker.</p>
+      <header className="topbar">
+        <div className="brand">
+          <span className="brand-mark" aria-hidden="true">
+            CS
+          </span>
+          <div>
+            <p className="kicker">Xưởng tranh</p>
+            <h1>
+              <a href="#/">ComicSystem</a>
+            </h1>
+            <p className="muted">Comic, nhân vật, cảnh, panel. Ảnh sinh bất đồng bộ trên worker.</p>
+          </div>
         </div>
         {http ? (
           <div className="row">
-            <span className="muted">{email}</span>
+            <span className="user-chip">{email}</span>
             <button type="button" className="ghost" onClick={signOut}>
               Đăng xuất
             </button>
