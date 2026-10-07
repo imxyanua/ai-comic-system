@@ -1,0 +1,25 @@
+# SDXL chưa có trong milestone 1. Service này báo lỗi job nếu chạy.
+# Tắt image-worker-mock trước khi bật profile gpu, nếu không hai worker cùng lấy queue.
+services:
+  image-worker:
+    profiles: ["gpu"]
+    build:
+      context: ../../apps/image-worker
+      dockerfile: Dockerfile
+    environment:
+      CELERY_BROKER_URL: redis://redis:6379/0
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+      MINIO_BUCKET: comic-assets
+      MINIO_USE_SSL: "false"
+      API_INTERNAL_URL: http://api:3000
+      INTERNAL_SERVICE_TOKEN: dev-only
+      MOCK_INFERENCE: "0"
+      INFERENCE_DEVICE: cuda
+      SDXL_MODEL_ID: stabilityai/stable-diffusion-xl-base-1.0
+    depends_on:
+      redis:
+        condition: service_healthy
+      api:
+        condition: service_healthy
