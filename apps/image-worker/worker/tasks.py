@@ -1,3 +1,4 @@
+import hashlib
 import io
 import logging
 import os
@@ -52,7 +53,7 @@ def run_job(job_id: str, storage_key: str, payload: dict[str, object]) -> None:
         fail(job_id, "MOCK_FAILURE", "Prompt có [mock:fail]")
         return
 
-    image = solid_png(64, 64)
+    image = solid_png(64, 64, mock_color(str(payload.get("prompt") or "")))
     try:
         put_object(storage_key, image)
     except Exception as error:
@@ -74,6 +75,12 @@ def mock_outcome(prompt: str) -> MockOutcome:
         fail=MOCK_FAIL_MARKER in prompt,
         delay_seconds=MOCK_SLOW_SECONDS if MOCK_SLOW_MARKER in prompt else 0,
     )
+
+
+def mock_color(prompt: str) -> tuple[int, int, int, int]:
+    """Different prompts give different mock images, so tests can tell panels apart."""
+    digest = hashlib.sha256(prompt.encode("utf-8")).digest()
+    return (digest[0], digest[1], digest[2], 255)
 
 
 def fail(job_id: str, code: str, message: str) -> None:
