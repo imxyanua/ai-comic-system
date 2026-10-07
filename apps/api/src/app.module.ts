@@ -4,8 +4,12 @@ import { AssetsService } from "./assets/assets.service";
 import { AuthController } from "./auth/auth.controller";
 import { AuthGuard } from "./auth/auth.guard";
 import { AuthService } from "./auth/auth.service";
+import { CharactersController } from "./comics/characters.controller";
+import { CharactersService } from "./comics/characters.service";
 import { ComicsController } from "./comics/comics.controller";
 import { ComicsService } from "./comics/comics.service";
+import { ScenesController } from "./comics/scenes.controller";
+import { ScenesService } from "./comics/scenes.service";
 import { loadEnv } from "./env";
 import { CeleryPublisher } from "./generation/celery-publisher";
 import { GenerationController } from "./generation/generation.controller";
@@ -20,6 +24,8 @@ import { APP_ENV } from "./tokens";
     HealthController,
     AuthController,
     ComicsController,
+    ScenesController,
+    CharactersController,
     GenerationController,
     InternalJobsController,
     AssetsController,
@@ -30,6 +36,8 @@ import { APP_ENV } from "./tokens";
     AuthService,
     AuthGuard,
     ComicsService,
+    ScenesService,
+    CharactersService,
     CeleryPublisher,
     GenerationService,
     AssetsService,

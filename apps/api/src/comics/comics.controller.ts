@@ -1,20 +1,20 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Put, UseGuards } from "@nestjs/common";
 import { AuthGuard } from "../auth/auth.guard";
 import { CurrentUserId } from "../auth/current-user.decorator";
-import { CreateComicDto, CreatePanelDto, CreateSceneDto } from "./comics.dto";
+import { CreateComicDto, PutStoryDto, UpdateComicDto } from "./comics.dto";
 import { ComicsService } from "./comics.service";
 
-@Controller("api/v1")
+@Controller("api/v1/comics")
 @UseGuards(AuthGuard)
 export class ComicsController {
   constructor(private readonly comics: ComicsService) {}
 
-  @Get("comics")
+  @Get()
   list(@CurrentUserId() userId: string) {
     return this.comics.listComics(userId);
   }
 
-  @Post("comics")
+  @Post()
   create(@CurrentUserId() userId: string, @Body() body: CreateComicDto) {
     return this.comics.createComic(userId, {
       title: body.title,
@@ -23,44 +23,41 @@ export class ComicsController {
     });
   }
 
-  @Get("comics/:comicId")
+  @Get(":comicId")
   get(@CurrentUserId() userId: string, @Param("comicId", ParseUUIDPipe) comicId: string) {
     return this.comics.getComic(userId, comicId);
   }
 
-  @Get("comics/:comicId/scenes")
-  listScenes(@CurrentUserId() userId: string, @Param("comicId", ParseUUIDPipe) comicId: string) {
-    return this.comics.listScenes(userId, comicId);
-  }
-
-  @Post("comics/:comicId/scenes")
-  createScene(
+  @Patch(":comicId")
+  update(
     @CurrentUserId() userId: string,
     @Param("comicId", ParseUUIDPipe) comicId: string,
-    @Body() body: CreateSceneDto,
+    @Body() body: UpdateComicDto,
   ) {
-    return this.comics.createScene(userId, comicId, {
-      sortOrder: body.sort_order,
+    return this.comics.updateComic(userId, comicId, {
       title: body.title,
-      summary: body.summary,
+      description: body.description,
+      styleGuide: body.style_guide,
+      status: body.status,
     });
   }
 
-  @Get("scenes/:sceneId/panels")
-  listPanels(@CurrentUserId() userId: string, @Param("sceneId", ParseUUIDPipe) sceneId: string) {
-    return this.comics.listPanels(userId, sceneId);
+  @Delete(":comicId")
+  archive(@CurrentUserId() userId: string, @Param("comicId", ParseUUIDPipe) comicId: string) {
+    return this.comics.archiveComic(userId, comicId);
   }
 
-  @Post("scenes/:sceneId/panels")
-  createPanel(
+  @Get(":comicId/story")
+  getStory(@CurrentUserId() userId: string, @Param("comicId", ParseUUIDPipe) comicId: string) {
+    return this.comics.getStory(userId, comicId);
+  }
+
+  @Put(":comicId/story")
+  putStory(
     @CurrentUserId() userId: string,
-    @Param("sceneId", ParseUUIDPipe) sceneId: string,
-    @Body() body: CreatePanelDto,
+    @Param("comicId", ParseUUIDPipe) comicId: string,
+    @Body() body: PutStoryDto,
   ) {
-    return this.comics.createPanel(userId, sceneId, {
-      sortOrder: body.sort_order,
-      imagePrompt: body.image_prompt,
-      negativePrompt: body.negative_prompt,
-    });
+    return this.comics.putStory(userId, comicId, body);
   }
 }

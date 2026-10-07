@@ -56,10 +56,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
       - name: Start stack with mock worker
         run: docker compose up --build -d
-      - name: Smoke test one panel
-        run: bash infra/docker/smoke-test.sh
+      - name: Smoke test
+        run: node infra/docker/smoke-test.mjs
       - name: Compose logs
         if: failure()
         run: docker compose logs --no-color

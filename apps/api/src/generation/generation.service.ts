@@ -1,6 +1,7 @@
 import { randomInt, randomUUID } from "crypto";
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import { GenerationJob, Prisma } from "@prisma/client";
+import { ownedPanel } from "../comics/ownership";
 import { Env } from "../env";
 import { apiError } from "../http";
 import { PrismaService } from "../prisma.service";
@@ -214,6 +215,15 @@ export class GenerationService {
     return toJobDetail(job);
   }
 
+  async listPanelJobs(userId: string, panelId: string) {
+    const panel = await ownedPanel(this.prisma, userId, panelId);
+    const jobs = await this.prisma.generationJob.findMany({
+      where: { panelId: panel.id },
+      orderBy: { createdAt: "desc" },
+    });
+    return jobs.map(toJobDetail);
+  }
+
   async applyCallback(
     jobId: string,
     input: { status: CallbackStatus; sizeBytes?: number; errorCode?: string; errorMessage?: string },
@@ -292,5 +302,7 @@ function toJobDetail(job: GenerationJob) {
     error_message: job.errorMessage,
     result_asset_id: job.resultAssetId,
     attempt: job.attempt,
+    created_at: job.createdAt.toISOString(),
+    finished_at: job.finishedAt?.toISOString() ?? null,
   };
 }
