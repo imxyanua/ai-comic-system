@@ -8,3 +8,5 @@ __pycache__/
 apps/api/prisma/*.db
 .DS_Store
 coverage/
+playwright-report/
+test-results/
