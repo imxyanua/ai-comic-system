@@ -17,6 +17,7 @@ import { GenerationService } from "./generation/generation.service";
 import { InternalJobsController } from "./generation/internal.controller";
 import { HealthController } from "./health.controller";
 import { PrismaService } from "./prisma.service";
+import { StorageService } from "./storage.service";
 import { APP_ENV } from "./tokens";
 
 @Module({
@@ -33,6 +34,7 @@ import { APP_ENV } from "./tokens";
   providers: [
     { provide: APP_ENV, useFactory: () => loadEnv() },
     PrismaService,
+    StorageService,
     AuthService,
     AuthGuard,
     ComicsService,

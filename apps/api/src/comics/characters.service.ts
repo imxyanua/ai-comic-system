@@ -25,13 +25,28 @@ export class CharactersService {
     return toCharacter(character);
   }
 
-  async update(userId: string, characterId: string, input: { name?: string; description?: string }) {
+  async update(
+    userId: string,
+    characterId: string,
+    input: { name?: string; description?: string; reference_asset_id?: string | null },
+  ) {
     const character = await ownedCharacter(this.prisma, userId, characterId);
+    if (input.reference_asset_id) {
+      const asset = await this.prisma.asset.findFirst({
+        where: { id: input.reference_asset_id, comicId: character.comicId, kind: "character_ref", status: "ready" },
+      });
+      if (!asset) {
+        throw apiError(400, "VALIDATION_ERROR", "Ảnh tham chiếu chưa upload xong hoặc không thuộc comic này", [
+          { field: "reference_asset_id", issue: "invalid" },
+        ]);
+      }
+    }
     const updated = await this.prisma.character.update({
       where: { id: character.id },
       data: {
         name: input.name === undefined ? undefined : requiredName(input.name),
         description: input.description?.trim(),
+        referenceAssetId: input.reference_asset_id,
       },
     });
     return toCharacter(updated);
