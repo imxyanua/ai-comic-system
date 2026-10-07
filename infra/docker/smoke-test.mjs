@@ -299,6 +299,78 @@ async function main() {
     await call("POST", `/jobs/${succeededJob.job_id}/retry`, { token: owner, expect: [409] });
   });
 
+  const waitForWorkflow = async (workflowId) => {
+    for (let attempt = 0; attempt < 45; attempt += 1) {
+      const { json } = await call("GET", `/workflows/${workflowId}`, { token: owner });
+      if (json.status !== "running") {
+        return json;
+      }
+      await sleep(2000);
+    }
+    throw new Error(`workflow ${workflowId} did not finish`);
+  };
+  const createScene = async (summary) =>
+    (await call("POST", `/comics/${comic.id}/scenes`, { token: owner, body: { summary } })).json;
+  const addPanel = async (sceneId, prompt) =>
+    (await call("POST", `/scenes/${sceneId}/panels`, { token: owner, body: { image_prompt: prompt } })).json;
+  const startBatch = (sceneIds, expect = [202]) =>
+    call("POST", `/comics/${comic.id}/workflows/batch-panel-images`, {
+      token: owner,
+      body: { scene_ids: sceneIds },
+      expect,
+    });
+
+  await step("batch with one failing panel ends completed_with_errors", async () => {
+    const scene = await createScene("batch");
+    const good = await addPanel(scene.id, "trời quang");
+    const bad = await addPanel(scene.id, "[mock:fail] sấm");
+    const started = (await startBatch([scene.id])).json;
+    assert(started.total === 2, `batch total is ${started.total}`);
+    await call("GET", `/workflows/${started.workflow_id}`, { token: stranger, expect: [404] });
+    const done = await waitForWorkflow(started.workflow_id);
+    assert(done.status === "completed_with_errors", `workflow ended as ${done.status}`);
+    assert(done.succeeded === 1 && done.failed === 1 && done.pending === 0, `counts ${JSON.stringify(done)}`);
+    assert(done.current_step === "finished", `current_step is ${done.current_step}`);
+    const panelsAfter = (await call("GET", `/scenes/${scene.id}/panels`, { token: owner })).json;
+    const goodAfter = panelsAfter.find((panel) => panel.id === good.id);
+    const badAfter = panelsAfter.find((panel) => panel.id === bad.id);
+    assert(goodAfter.generation_status === "succeeded" && goodAfter.image_asset_id, "good panel has no image");
+    assert(badAfter.generation_status === "failed" && !badAfter.image_asset_id, "failed panel has an image");
+    const image = await downloadAsset(owner, goodAfter.image_asset_id);
+    assert(image.subarray(0, 8).toString("hex") === PNG_SIGNATURE, "batch image is not a PNG");
+    const goodJobs = (await call("GET", `/panels/${good.id}/jobs`, { token: owner })).json;
+    assert(goodJobs[0].workflow_run_id === started.workflow_id, "job not linked to the workflow");
+  });
+
+  await step("batch rejects foreign or empty scenes", async () => {
+    const foreignComic = (await call("POST", "/comics", { token: stranger, body: { title: "Khác" } })).json;
+    const foreignScene = (
+      await call("POST", `/comics/${foreignComic.id}/scenes`, { token: stranger, body: { summary: "x" } })
+    ).json;
+    await startBatch([foreignScene.id], [400]);
+    const empty = await createScene("trống");
+    await startBatch([empty.id], [400]);
+    await call("DELETE", `/scenes/${empty.id}`, { token: owner, expect: [204] });
+  });
+
+  await step("cancel a running batch", async () => {
+    const scene = await createScene("batch hủy");
+    await addPanel(scene.id, "[mock:slow] một");
+    await addPanel(scene.id, "[mock:slow] hai");
+    const started = (await startBatch([scene.id])).json;
+    const cancelled = (await call("POST", `/workflows/${started.workflow_id}/cancel`, { token: owner })).json;
+    assert(cancelled.status === "cancelled" && cancelled.cancelled === 2, `cancel returned ${JSON.stringify(cancelled)}`);
+    await call("POST", `/workflows/${started.workflow_id}/cancel`, { token: owner, expect: [409] });
+    await sleep(9000);
+    const after = (await call("GET", `/workflows/${started.workflow_id}`, { token: owner })).json;
+    assert(after.status === "cancelled" && after.cancelled === 2, `workflow became ${JSON.stringify(after)}`);
+    const panelsAfter = (await call("GET", `/scenes/${scene.id}/panels`, { token: owner })).json;
+    assert(
+      panelsAfter.every((panel) => panel.generation_status === "cancelled" && panel.image_asset_id === null),
+      "a cancelled batch panel received an image",
+    );
+  });
+
   await step("delete panel and scene", async () => {
     const before = (await call("GET", `/scenes/${sceneA.id}/panels`, { token: owner })).json.length;
     await call("DELETE", `/panels/${panels[2].id}`, { token: owner, expect: [204] });
