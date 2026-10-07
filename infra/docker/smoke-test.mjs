@@ -376,7 +376,7 @@ async function main() {
     await call("DELETE", `/panels/${panels[2].id}`, { token: owner, expect: [204] });
     await call("DELETE", `/scenes/${sceneB.id}`, { token: owner, expect: [204] });
     const scenes = (await call("GET", `/comics/${comic.id}/scenes`, { token: owner })).json;
-    assert(scenes.length === 1, "scene was not deleted");
+    assert(!scenes.some((scene) => scene.id === sceneB.id), "scene was not deleted");
     const remaining = (await call("GET", `/scenes/${sceneA.id}/panels`, { token: owner })).json;
     assert(remaining.length === before - 1, "panel was not deleted");
   });
